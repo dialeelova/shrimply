@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Shrimply</title>
+  <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --edge: #8B84D7;      /* periwinkle outline */
+      --frame: #C8C8EF;     /* lavender frame */
+      --ink: #4A47A8;       /* text */
+      --bubble: #D0F0FF;
+    }
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    body { font-family: 'Pixelify Sans', 'Courier New', monospace; }
+
+    .shadow {
+      height: calc(100% - 20px);
+      margin: 10px;
+      filter: drop-shadow(4px 4px 0 rgba(74, 71, 168, 0.28));
+    }
+    .win  { box-sizing: border-box; height: 100%; padding: 4px; background: linear-gradient(135deg, #EFA6D2 0%, #8B84D7 24%, #8B84D7 76%, #EFA6D2 100%); }
+    .face { height: 100%; display: flex; flex-direction: column;
+      background: radial-gradient(circle at 0% 0%, rgba(255,205,230,0.85), rgba(255,205,230,0) 34%),
+                  radial-gradient(circle at 100% 100%, rgba(255,205,230,0.85), rgba(255,205,230,0) 34%),
+                  var(--frame); }
+
+    .titlebar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 8px 6px 12px;
+      color: var(--ink); font-size: 24px; font-weight: 700;
+      -webkit-app-region: drag; user-select: none;
+    }
+    .title { display: flex; align-items: center; gap: 8px; }
+    .title img { width: 21px; height: 21px; image-rendering: pixelated; }
+    .buttons { display: flex; gap: 6px; -webkit-app-region: no-drag; }
+    .btn {
+      width: 28px; height: 28px; padding: 0; border-radius: 50%;
+      border: 3px solid var(--edge); background: var(--bubble); color: var(--ink);
+      font: inherit; font-size: 16px; line-height: 1; cursor: pointer;
+    }
+    .btn:hover { background: #FFD9F2; }
+
+    .sea-border { flex: 1; margin: 0 8px 8px; padding: 3px; background: var(--edge); }
+    .sea {
+      position: relative; height: 100%; overflow: hidden;
+      background:
+        radial-gradient(circle at 0% 0%, rgba(255,190,222,0.55), rgba(255,190,222,0) 42%),
+        radial-gradient(circle at 100% 0%, rgba(255,190,222,0.55), rgba(255,190,222,0) 42%),
+        radial-gradient(circle at 0% 100%, rgba(255,190,222,0.35), rgba(255,190,222,0) 36%),
+        radial-gradient(circle at 100% 100%, rgba(255,190,222,0.35), rgba(255,190,222,0) 36%),
+        linear-gradient(#FFD9F2 0%, #D0F0FF 26%, #B3E9EE 48%, #A2E4E2 66%, #84A0D8 100%);
+    }
+    .rays {
+      position: absolute; inset: 0;
+      background: repeating-linear-gradient(105deg, rgba(255,255,255,0) 0 26px, rgba(255,255,255,0.28) 26px 44px);
+      -webkit-mask-image: linear-gradient(to bottom, #000, transparent 70%);
+      animation: sway 7s ease-in-out infinite;
+    }
+    @keyframes sway { 0%,100% { opacity: .35; transform: translateX(-10px); } 50% { opacity: .75; transform: translateX(10px); } }
+
+    .seabed {
+      position: absolute; left: 0; right: 0; bottom: 0; height: 96px;
+      background: url('assets/seabed.png') no-repeat bottom / 100% auto;
+      image-rendering: pixelated;
+    }
+    #bubbles { position: absolute; inset: 0; }
+    .bub {
+      position: absolute; bottom: -50px; image-rendering: pixelated;
+      animation: rise var(--t) linear forwards;
+    }
+    .bub.peach { filter: hue-rotate(105deg) saturate(1.2); }
+    @keyframes rise {
+      0%   { transform: translate(0, 0); opacity: 0; }
+      10%  { opacity: 1; }
+      50%  { transform: translate(var(--dx), -190px); }
+      90%  { opacity: 1; }
+      100% { transform: translate(calc(var(--dx) * -1), -420px); opacity: 0; }
+    }
+
+    #shrimp {
+      position: absolute; left: 50%; top: 52%;
+      width: 150px; margin-left: -75px; margin-top: -75px;
+      image-rendering: pixelated; transform-origin: 50% 90%;
+      animation: bob 2.6s ease-in-out infinite;
+      cursor: pointer; user-select: none; -webkit-user-drag: none;
+    }
+    @keyframes bob {
+      0%,100% { transform: translateY(0) rotate(-2deg); }
+      50%     { transform: translateY(-10px) rotate(2deg); }
+    }
+
+    .msg-border { position: absolute; left: 12px; right: 12px; top: 12px; padding: 3px; background: #F2A98A; }
+    .msg { padding: 8px 10px; background: #FFE8CC; color: #C9531A; text-align: center; font-size: 18px; }
+  </style>
+</head>
+<body>
+  <div class="shadow">
+    <div class="win" data-px data-s="4" data-n="3">
+      <div class="face" data-px data-s="4" data-n="2">
+        <div class="titlebar">
+          <span class="title"><img src="assets/bubble-s.png" alt="">Shrimply</span>
+          <div class="buttons">
+            <button class="btn" id="min" title="Minimize">-</button>
+            <button class="btn" id="close" title="Quit">x</button>
+          </div>
+        </div>
+        <div class="sea-border" data-px data-s="3" data-n="1">
+          <div class="sea" data-px data-s="3" data-n="1">
+            <div class="rays"></div>
+            <div id="bubbles"></div>
+            <div class="seabed"></div>
+            <img id="shrimp" src="assets/straight.png" alt="Shrimply">
+            <div class="msg-border" data-px data-s="3" data-n="1">
+              <div class="msg" id="msg" data-px data-s="3" data-n="1">Shrimply do your best!</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+    document.getElementById('close').onclick = () => ipcRenderer.send('quit');
+    document.getElementById('min').onclick = () => ipcRenderer.send('minimize');
+
+    // stepped pixel corners: staircase of n steps, each s px
+    function poly(s, n) {
+      const tl = [];
+      for (let i = 0; i < n; i++) tl.push([i * s, (n - i) * s], [(i + 1) * s, (n - i) * s]);
+      tl.push([n * s, 0]);
+      const X = (v, m) => m ? `calc(100% - ${v}px)` : `${v}px`;
+      const pts = [
+        ...tl.map(([x, y]) => X(x, 0) + ' ' + X(y, 0)),
+        ...tl.slice().reverse().map(([x, y]) => X(x, 1) + ' ' + X(y, 0)),
+        ...tl.map(([x, y]) => X(x, 1) + ' ' + X(y, 1)),
+        ...tl.slice().reverse().map(([x, y]) => X(x, 0) + ' ' + X(y, 1))
+      ];
+      return `polygon(${pts.join(',')})`;
+    }
+    document.querySelectorAll('[data-px]').forEach(el => {
+      el.style.clipPath = poly(+el.dataset.s, +el.dataset.n);
+    });
+
+    // rising bubbles
+    const layer = document.getElementById('bubbles');
+    const sizes = ['bubble-s.png', 'bubble-m.png', 'bubble-l.png'];
+    function spawn() {
+      if (layer.children.length > 14) return;
+      const b = document.createElement('img');
+      b.className = 'bub';
+      b.src = 'assets/' + sizes[Math.floor(Math.random() * sizes.length)];
+      if (Math.random() < 0.35) b.classList.add('peach');
+      b.style.left = Math.random() * 90 + 3 + '%';
+      b.style.setProperty('--t', (6 + Math.random() * 5) + 's');
+      b.style.setProperty('--dx', (Math.random() * 24 - 12) + 'px');
+      b.addEventListener('animationend', () => b.remove());
+      layer.appendChild(b);
+    }
+    spawn(); setInterval(spawn, 1100);
+
+    // click the shrimp: happy for a moment
+    const shrimp = document.getElementById('shrimp');
+    const msg = document.getElementById('msg');
+    const lines = ['You are doing great!', 'Sit tall, little shrimp!', 'Shoulders back!', 'Proud of you!'];
+    let timer;
+    shrimp.addEventListener('click', () => {
+      shrimp.src = 'assets/happy.png';
+      msg.textContent = lines[Math.floor(Math.random() * lines.length)];
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        shrimp.src = 'assets/straight.png';
+        msg.textContent = 'Shrimply do your best!';
+      }, 2000);
+    });
+  </script>
+</body>
+</html>
