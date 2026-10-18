@@ -92,6 +92,18 @@
 
     .msg-border { position: absolute; left: 12px; right: 12px; top: 12px; padding: 3px; background: #F2A98A; }
     .msg { padding: 8px 10px; background: #FFE8CC; color: #C9531A; text-align: center; font-size: 18px; }
+    .btn.size { display: flex; align-items: center; justify-content: center; }
+    .btn.size::before { content: ''; width: 9px; height: 9px; border: 2px solid var(--ink); }
+    .btn.off { opacity: 0.45; text-decoration: line-through; }
+    .act-border {
+      position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+      padding: 3px; background: var(--edge); display: none; white-space: nowrap;
+    }
+    .act {
+      display: block; border: none; cursor: pointer; padding: 6px 14px;
+      background: #FFD9F2; color: var(--ink); font: inherit; font-size: 16px;
+    }
+    .act:hover { background: #FFC8E1; }
   </style>
 </head>
 <body>
@@ -101,6 +113,8 @@
         <div class="titlebar">
           <span class="title"><img src="assets/bubble-s.png" alt="">Shrimply</span>
           <div class="buttons">
+            <button class="btn size" id="size" title="Window size"></button>
+            <button class="btn" id="mute" title="Sound on/off">&#9834;</button>
             <button class="btn" id="min" title="Minimize">-</button>
             <button class="btn" id="close" title="Quit">x</button>
           </div>
@@ -111,6 +125,9 @@
             <div id="bubbles"></div>
             <div class="seabed"></div>
             <img id="shrimp" src="assets/straight.png" alt="Shrimply">
+            <div class="act-border" id="actWrap" data-px data-s="3" data-n="1">
+              <button class="act" id="act">I am sitting straight</button>
+            </div>
             <div class="msg-border" data-px data-s="3" data-n="1">
               <div class="msg" id="msg" data-px data-s="3" data-n="1">Shrimply do your best!</div>
             </div>
@@ -121,7 +138,7 @@
   </div>
 
   <script>
-    const { ipcRenderer } = require('electron');
+    const { ipcRenderer, webFrame } = require('electron');
     document.getElementById('close').onclick = () => ipcRenderer.send('quit');
     document.getElementById('min').onclick = () => ipcRenderer.send('minimize');
 
@@ -160,20 +177,120 @@
     }
     spawn(); setInterval(spawn, 1100);
 
-    // click the shrimp: happy for a moment
+    // ---------- Reminder Mode ----------
+    const demo = new URLSearchParams(location.search).get('test') === '1';
+    const WARN_MS = (demo ? 10 : 20 * 60) * 1000;   // time until the first reminder
+    const BAD_MS  = (demo ? 8 : 2 * 60) * 1000;     // then until the shrimp is fully curled
+
+    const WARN_LINES = ['Psst... is your back bending?', 'Check your back, little shrimp!', 'Shoulders back, please!'];
+    const BAD_LINES  = ["Don't be a shrimp! Sit up straight!", 'You are turning into a shrimp!', 'Straighten up, shrimp!'];
+    const HAPPY_LINES = ['Much better! Keep it up!', 'Proud of you!', 'Back to work, champion!'];
+    const IDLE_LINE = 'Shrimply do your best!';
+    const PICS = { good: 'straight', warn: 'slight', bad: 'curled', happy: 'happy' };
+    const WIDTHS = { good: 150, warn: 168, bad: 158, happy: 150 };   // so every pose looks the same size
+
     const shrimp = document.getElementById('shrimp');
     const msg = document.getElementById('msg');
-    const lines = ['You are doing great!', 'Sit tall, little shrimp!', 'Shoulders back!', 'Proud of you!'];
-    let timer;
+    const actWrap = document.getElementById('actWrap');
+    let state = 'good', warnTimer, badTimer, happyTimer, muted = false;
+
+    const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+    function setState(st, text) {
+      state = st;
+      shrimp.src = 'assets/' + PICS[st] + '.png';
+      shrimp.style.width = WIDTHS[st] + 'px';
+      shrimp.style.marginLeft = -WIDTHS[st] / 2 + 'px';
+      actWrap.style.display = (st === 'warn' || st === 'bad') ? 'block' : 'none';
+      if (text) msg.textContent = text;
+    }
+
+    // ---------- the two sounds (made in code, no files) ----------
+    const audio = new (window.AudioContext || window.webkitAudioContext)();
+    function tone(freq, start, dur, type, vol) {
+      const t = audio.currentTime + start;
+      const osc = audio.createOscillator(), gain = audio.createGain();
+      osc.type = type; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.linearRampToValueAtTime(vol, t + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(gain).connect(audio.destination);
+      osc.start(t); osc.stop(t + dur + 0.05);
+    }
+    function chime() {            // soft two-note rise: the reminder
+      if (muted) return; audio.resume();
+      tone(659.25, 0, 0.55, 'sine', 0.12); tone(880, 0.2, 0.8, 'sine', 0.12);
+    }
+    function happyNote() {        // tiny ta-da: you fixed it
+      if (muted) return; audio.resume();
+      tone(523.25, 0, 0.14, 'triangle', 0.14); tone(659.25, 0.12, 0.14, 'triangle', 0.14); tone(783.99, 0.24, 0.4, 'triangle', 0.14);
+    }
+
+    // ---------- the cycle ----------
+    function schedule() {
+      clearTimeout(warnTimer); clearTimeout(badTimer);
+      warnTimer = setTimeout(() => {
+        setState('warn', pick(WARN_LINES));
+        chime();
+        ipcRenderer.send('attention');
+        badTimer = setTimeout(() => setState('bad', pick(BAD_LINES)), BAD_MS);
+      }, WARN_MS);
+    }
+    function fixed() {            // user sat up straight
+      clearTimeout(warnTimer); clearTimeout(badTimer); clearTimeout(happyTimer);
+      setState('happy', pick(HAPPY_LINES));
+      happyNote();
+      happyTimer = setTimeout(() => { setState('good', IDLE_LINE); schedule(); }, 3000);
+    }
+
+    document.getElementById('act').onclick = fixed;
     shrimp.addEventListener('click', () => {
-      shrimp.src = 'assets/happy.png';
-      msg.textContent = lines[Math.floor(Math.random() * lines.length)];
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        shrimp.src = 'assets/straight.png';
-        msg.textContent = 'Shrimply do your best!';
-      }, 2000);
+      if (state === 'warn' || state === 'bad') return fixed();
+      if (state === 'good') {     // just a little cheer, the timer keeps running
+        clearTimeout(happyTimer);
+        setState('happy', pick(HAPPY_LINES));
+        happyTimer = setTimeout(() => { if (state === 'happy') setState('good', IDLE_LINE); }, 2000);
+      }
     });
+    document.getElementById('mute').onclick = e => {
+      muted = !muted; e.currentTarget.classList.toggle('off', muted);
+    };
+
+    // ---------- blinking: the eyes close for a moment, now and then ----------
+    const BLINK = { good: 'straight-blink', warn: 'slight-blink', bad: 'curled-blink' };
+    Object.values(BLINK).forEach(n => { new Image().src = 'assets/' + n + '.png'; });   // preload
+    function blinkOnce() {
+      const st = state;
+      if (!BLINK[st]) return;                       // happy already has closed eyes
+      shrimp.src = 'assets/' + BLINK[st] + '.png';
+      setTimeout(() => { if (state === st) shrimp.src = 'assets/' + PICS[st] + '.png'; }, 160);
+    }
+    function blinkLoop() {
+      setTimeout(() => {
+        blinkOnce();
+        if (Math.random() < 0.25) setTimeout(blinkOnce, 320);   // sometimes a double blink
+        blinkLoop();
+      }, 2500 + Math.random() * 3500);
+    }
+    blinkLoop();
+
+    // ---------- window size: 100% (biggest) down to 70% ----------
+    const MIN_SCALE = 0.7, MAX_SCALE = 1;
+    let scale = 1;
+    function applyScale(v) {
+      scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.round(v * 100) / 100));
+      webFrame.setZoomFactor(scale);
+      ipcRenderer.send('scale', scale);
+      try { localStorage.setItem('scale', String(scale)); } catch (e) {}
+    }
+    document.getElementById('size').onclick = () => applyScale(scale > 0.9 ? 0.85 : scale > 0.75 ? 0.7 : 1);
+    window.addEventListener('wheel', e => {       // Ctrl + mouse wheel also works
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      applyScale(scale + (e.deltaY < 0 ? 0.05 : -0.05));
+    }, { passive: false });
+    try { applyScale(parseFloat(localStorage.getItem('scale')) || 1); } catch (e) { applyScale(1); }
+
+    schedule();
   </script>
 </body>
 </html>
