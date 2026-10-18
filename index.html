@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <title>Shrimply</title>
-  <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&display=swap" rel="stylesheet">
   <style>
+    @font-face { font-family: 'Pixelify Sans'; font-weight: 500; src: url('assets/fonts/pixelify-sans-latin-500-normal.woff2') format('woff2'); }
+    @font-face { font-family: 'Pixelify Sans'; font-weight: 700; src: url('assets/fonts/pixelify-sans-latin-700-normal.woff2') format('woff2'); }
+    @font-face { font-family: 'Press Start 2P'; font-weight: 400; src: url('assets/fonts/press-start-2p-latin-400-normal.woff2') format('woff2'); }
     :root {
       --edge: #8B84D7;      /* periwinkle outline */
       --frame: #C8C8EF;     /* lavender frame */
@@ -104,6 +106,23 @@
       background: #FFD9F2; color: var(--ink); font: inherit; font-size: 16px;
     }
     .act:hover { background: #FFC8E1; }
+    .btn.gear { display: flex; align-items: center; justify-content: center; }
+    .btn.gear::before { content: ''; width: 12px; height: 2px; background: var(--ink);
+      box-shadow: 0 -5px 0 var(--ink), 0 5px 0 var(--ink); }
+    .panel-border { position: absolute; left: 12px; right: 12px; top: 12px; bottom: 12px; z-index: 5;
+      padding: 3px; box-sizing: border-box; background: var(--edge); display: none; }
+    .panel { height: 100%; box-sizing: border-box; padding: 10px 12px; background: #FBF6FF; color: var(--ink);
+      display: flex; flex-direction: column; gap: 9px; font-size: 16px; }
+    .p-title { text-align: center; font-size: 22px; font-weight: 700; }
+    .chips { display: flex; gap: 6px; margin-top: 4px; }
+    .chip { flex: 1; padding: 4px 0; border: 3px solid var(--edge); background: #fff; color: var(--ink);
+      font-family: 'Press Start 2P', 'Courier New', monospace; font-size: 11px; cursor: pointer; }
+    .chip:hover { background: #FFE8F3; }
+    .chip.on { background: #FFC8E1; }
+    .p-note { font-size: 13px; text-align: center; opacity: 0.8; }
+    .done { margin-top: auto; align-self: center; padding: 5px 18px; border: 3px solid var(--edge);
+      background: #FFD9F2; color: var(--ink); font: inherit; font-size: 16px; cursor: pointer; }
+    .done:hover { background: #FFC8E1; }
   </style>
 </head>
 <body>
@@ -113,6 +132,7 @@
         <div class="titlebar">
           <span class="title"><img src="assets/bubble-s.png" alt="">Shrimply</span>
           <div class="buttons">
+            <button class="btn gear" id="gear" title="Settings"></button>
             <button class="btn size" id="size" title="Window size"></button>
             <button class="btn" id="mute" title="Sound on/off">&#9834;</button>
             <button class="btn" id="min" title="Minimize">-</button>
@@ -125,6 +145,14 @@
             <div id="bubbles"></div>
             <div class="seabed"></div>
             <img id="shrimp" src="assets/straight.png" alt="Shrimply">
+            <div class="panel-border" id="panel" data-px data-s="3" data-n="1">
+              <div class="panel" data-px data-s="3" data-n="1">
+                <div class="p-title">Settings</div>
+                <div id="rows"></div>
+                <div class="p-note" id="note"></div>
+                <button class="done" id="done">Done</button>
+              </div>
+            </div>
             <div class="act-border" id="actWrap" data-px data-s="3" data-n="1">
               <button class="act" id="act">I am sitting straight</button>
             </div>
@@ -179,8 +207,13 @@
 
     // ---------- Reminder Mode ----------
     const demo = new URLSearchParams(location.search).get('test') === '1';
-    const WARN_MS = (demo ? 10 : 20 * 60) * 1000;   // time until the first reminder
-    const BAD_MS  = (demo ? 8 : 2 * 60) * 1000;     // then until the shrimp is fully curled
+    // ---------- settings (saved in the app, so they are remembered) ----------
+    const DEFAULTS = { remind: 20, sound: true };
+    let cfg = Object.assign({}, DEFAULTS);
+    try { Object.assign(cfg, JSON.parse(localStorage.getItem('settings') || '{}')); } catch (e) {}
+    function saveCfg() { try { localStorage.setItem('settings', JSON.stringify(cfg)); } catch (e) {} }
+    const warnMs = () => (demo ? 10 : cfg.remind * 60) * 1000;   // time until the first reminder
+    const badMs  = () => (demo ? 8 : 2 * 60) * 1000;             // then 2 minutes until fully curled
 
     const WARN_LINES = ['Psst... is your back bending?', 'Check your back, little shrimp!', 'Shoulders back, please!'];
     const BAD_LINES  = ["Don't be a shrimp! Sit up straight!", 'You are turning into a shrimp!', 'Straighten up, shrimp!'];
@@ -192,7 +225,7 @@
     const shrimp = document.getElementById('shrimp');
     const msg = document.getElementById('msg');
     const actWrap = document.getElementById('actWrap');
-    let state = 'good', warnTimer, badTimer, happyTimer, muted = false;
+    let state = 'good', warnTimer, badTimer, happyTimer, muted = !cfg.sound;
 
     const pick = arr => arr[Math.floor(Math.random() * arr.length)];
     function setState(st, text) {
@@ -230,10 +263,11 @@
       clearTimeout(warnTimer); clearTimeout(badTimer);
       warnTimer = setTimeout(() => {
         setState('warn', pick(WARN_LINES));
+        closeSettings();
         chime();
         ipcRenderer.send('attention');
-        badTimer = setTimeout(() => setState('bad', pick(BAD_LINES)), BAD_MS);
-      }, WARN_MS);
+        badTimer = setTimeout(() => setState('bad', pick(BAD_LINES)), badMs());
+      }, warnMs());
     }
     function fixed() {            // user sat up straight
       clearTimeout(warnTimer); clearTimeout(badTimer); clearTimeout(happyTimer);
@@ -251,9 +285,7 @@
         happyTimer = setTimeout(() => { if (state === 'happy') setState('good', IDLE_LINE); }, 2000);
       }
     });
-    document.getElementById('mute').onclick = e => {
-      muted = !muted; e.currentTarget.classList.toggle('off', muted);
-    };
+    document.getElementById('mute').onclick = () => setSound(muted);
 
     // ---------- blinking: the eyes close for a moment, now and then ----------
     const BLINK = { good: 'straight-blink', warn: 'slight-blink', bad: 'curled-blink' };
@@ -289,6 +321,40 @@
       applyScale(scale + (e.deltaY < 0 ? 0.05 : -0.05));
     }, { passive: false });
     try { applyScale(parseFloat(localStorage.getItem('scale')) || 1); } catch (e) { applyScale(1); }
+
+    // ---------- settings panel ----------
+    const ROWS = [
+      { key: 'remind', label: 'Minutes between reminders', opts: [15, 20, 30, 45], names: ['15', '20', '30', '45'] },
+      { key: 'sound',  label: 'Sound',                        opts: [true, false],   names: ['On', 'Off'] }
+    ];
+    const panel = document.getElementById('panel');
+    const rowsEl = document.getElementById('rows');
+    function refreshChips() {
+      rowsEl.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', String(cfg[c.dataset.key]) === c.dataset.v));
+      document.getElementById('mute').classList.toggle('off', muted);
+    }
+    function setSound(on) { cfg.sound = on; muted = !on; saveCfg(); refreshChips(); }
+    ROWS.forEach(r => {
+      const row = document.createElement('div'); row.className = 'row';
+      row.innerHTML = '<span>' + r.label + '</span><div class="chips"></div>';
+      r.opts.forEach((o, i) => {
+        const b = document.createElement('button');
+        b.className = 'chip'; b.textContent = r.names[i]; b.dataset.key = r.key; b.dataset.v = String(o);
+        b.onclick = () => {
+          if (r.key === 'sound') return setSound(o);
+          cfg[r.key] = o; saveCfg(); refreshChips();
+          if (r.key === 'remind' && state === 'good') schedule();   // restart the countdown with the new time
+        };
+        row.querySelector('.chips').appendChild(b);
+      });
+      rowsEl.appendChild(row);
+    });
+    document.getElementById('note').textContent = demo ? 'Demo mode: reminders use fast test times.' : '';
+    function openSettings() { panel.style.display = 'block'; }
+    function closeSettings() { panel.style.display = 'none'; }
+    document.getElementById('gear').onclick = () => (panel.style.display === 'block' ? closeSettings() : openSettings());
+    document.getElementById('done').onclick = closeSettings;
+    refreshChips();
 
     schedule();
   </script>
