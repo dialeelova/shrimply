@@ -36,7 +36,8 @@ function createWindow() {
 
   // "npm run demo" starts a fast test mode (reminders after a few seconds)
   const demo = process.argv.includes('--test') ? '1' : '0';
-  win.loadFile('index.html', { query: { test: demo } });
+  const night = process.argv.includes('--night') ? '1' : '0';   // "npm run night" shows the sleeping look
+  win.loadFile('index.html', { query: { test: demo, night } });
 }
 
 function showWindow() {
