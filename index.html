@@ -146,6 +146,26 @@
     .stat b { font-family: 'Press Start 2P', 'Courier New', monospace; font-size: 12px; font-weight: 400; }
     .bottom-row { position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; align-items: center; z-index: 4; pointer-events: none; }
     .bottom-row > * { pointer-events: auto; }
+    @keyframes nstar { from { opacity: 0.25; transform: scale(0.8); } to { opacity: 1; transform: scale(1.15); } }
+    .nstar { position: absolute; width: 15px; pointer-events: none; animation: nstar 2.4s ease-in-out infinite alternate; }
+    body:not(.night) .nstar, body:not(.night) .ndot { display: none; }
+    body.night #bubbles { display: none; }
+    .ndot { position: absolute; width: 3px; height: 3px; background: #DCE8FF; box-shadow: 0 0 3px rgba(220,232,255,0.8);
+      pointer-events: none; animation: nstar 2.8s ease-in-out infinite alternate; }
+    body.night .sea { background:
+      radial-gradient(circle at 0% 0%, rgba(170,130,230,0.35), rgba(170,130,230,0) 42%),
+      radial-gradient(circle at 100% 0%, rgba(170,130,230,0.35), rgba(170,130,230,0) 42%),
+      linear-gradient(#2A2D74 0%, #35509C 34%, #2E6E9A 66%, #274F86 100%); }
+    body.night .rays { animation: none; opacity: 0.16; }
+    .zzz { position: absolute; z-index: 3; pointer-events: none; image-rendering: pixelated; animation: zrise 3.6s ease-out forwards; }
+    @keyframes zrise {
+      0%   { transform: translate(0, 0) scale(0.6); opacity: 0; }
+      15%  { opacity: 1; }
+      100% { transform: translate(var(--dx), -115px) scale(1.15); opacity: 0; }
+    }
+    body.night .face { filter: brightness(0.86) saturate(0.92); }
+    body.night .msg { background: #E8DDF1; color: #5B4AA6; }
+    body.night .seabed { filter: brightness(0.72) saturate(0.85); }
   </style>
 </head>
 <body>
@@ -233,7 +253,7 @@
     const layer = document.getElementById('bubbles');
     const sizes = ['bubble-s.png', 'bubble-m.png', 'bubble-l.png'];
     function spawn() {
-      if (layer.children.length > 14) return;
+      if (layer.children.length > 14 || document.body.classList.contains('night')) return;
       const b = document.createElement('img');
       b.className = 'bub';
       b.src = 'assets/' + sizes[Math.floor(Math.random() * sizes.length)];
@@ -247,11 +267,14 @@
     spawn(); setInterval(spawn, 1100);
 
     // ---------- Reminder Mode ----------
-    const demo = new URLSearchParams(location.search).get('test') === '1';
+    const params = new URLSearchParams(location.search);
+    const demo = params.get('test') === '1';
+    const forceNight = params.get('night') === '1';     // "npm run night" shows the sleeping look
     // ---------- settings (saved in the app, so they are remembered) ----------
-    const DEFAULTS = { remind: 20, sound: true };
+    const DEFAULTS = { remind: 20, quiet: 'off', sound: true };
     let cfg = Object.assign({}, DEFAULTS);
     try { Object.assign(cfg, JSON.parse(localStorage.getItem('settings') || '{}')); } catch (e) {}
+    if (cfg.quiet !== 'on') cfg.quiet = 'off';          // older versions had time ranges
     function saveCfg() { try { localStorage.setItem('settings', JSON.stringify(cfg)); } catch (e) {} }
     const warnMs = () => (demo ? 10 : cfg.remind * 60) * 1000;   // time until the first reminder
     const badMs  = () => (demo ? 8 : 2 * 60) * 1000;             // then 2 minutes until fully curled
@@ -259,7 +282,8 @@
     const WARN_LINES = ['Psst... is your back bending?', 'Check your back, little shrimp!', 'Shoulders back, please!'];
     const BAD_LINES  = ["Don't be a shrimp! Sit up straight!", 'You are turning into a shrimp!', 'Straighten up, shrimp!'];
     const HAPPY_LINES = ['Much better! Keep it up!', 'Proud of you!', 'Back to work, champion!'];
-    const IDLE_LINE = 'Shrimply do your best!';
+    let quiet = false;   // true during quiet hours: night look, no reminders, no sounds
+    const idleLine = () => (quiet ? 'Zzz... Shrimply is sleeping' : 'Shrimply do your best!');
     const PICS = { good: 'straight', warn: 'slight', bad: 'curled', happy: 'happy', water: 'straight' };
     const WIDTHS = { good: 150, warn: 168, bad: 158, happy: 150, water: 150 };   // so every pose looks the same size
 
@@ -270,15 +294,17 @@
     const dropsEl = document.getElementById('drops');
     const msgBox = document.querySelector('.msg-border');
     const sea = document.querySelector('.sea');
-    const WATER_LINES = ['Drink some water!', 'Time to drink water!', 'Have a sip of water!', 'Stay hydrated! Drink up!'];
+    const WATER_LINES = ['Drink some water!', 'Time to drink water!', 'Have a sip of water!', 'Stay hydrated! Drink water!'];
     let state = 'good', warnTimer, badTimer, happyTimer, muted = !cfg.sound;
 
     const pick = arr => arr[Math.floor(Math.random() * arr.length)];
     function setState(st, text) {
       state = st;
-      shrimp.src = 'assets/' + PICS[st] + '.png';
-      shrimp.style.width = WIDTHS[st] + 'px';
-      shrimp.style.marginLeft = -WIDTHS[st] / 2 + 'px';
+      const sleepy = st === 'good' && quiet;
+      const w = sleepy ? 165 : WIDTHS[st];
+      shrimp.src = 'assets/' + (sleepy ? 'sleepy-clean' : PICS[st]) + '.png';
+      shrimp.style.width = w + 'px';
+      shrimp.style.marginLeft = -w / 2 + 'px';
       actWrap.style.display = (st === 'warn' || st === 'bad') ? 'block' : 'none';
       if (st === 'water') startRain(); else stopRain();
       msgBox.classList.toggle('water', st === 'water');
@@ -299,16 +325,16 @@
       osc.start(t); osc.stop(t + dur + 0.05);
     }
     function chime() {            // soft two-note rise: the reminder
-      if (muted) return; audio.resume();
+      if (muted || quiet) return; audio.resume();
       tone(659.25, 0, 0.55, 'sine', 0.12); tone(880, 0.2, 0.8, 'sine', 0.12);
     }
     function happyNote() {        // tiny ta-da: you fixed it
-      if (muted) return; audio.resume();
+      if (muted || quiet) return; audio.resume();
       tone(523.25, 0, 0.14, 'triangle', 0.14); tone(659.25, 0.12, 0.14, 'triangle', 0.14); tone(783.99, 0.24, 0.4, 'triangle', 0.14);
     }
 
     function waterSound() {       // one water drop: a soft "bloop" that rises and fades, plus a tiny sparkle on top
-      if (muted) return; audio.resume();
+      if (muted || quiet) return; audio.resume();
       const t = audio.currentTime;
       [[1, 0.18, 0.42], [2, 0.05, 0.16]].forEach(([mult, vol, len]) => {
         const osc = audio.createOscillator(), gain = audio.createGain();
@@ -327,6 +353,7 @@
     function schedule() {
       clearTimeout(warnTimer); clearTimeout(badTimer);
       warnTimer = setTimeout(() => {
+        if (quiet) return schedule();            // quiet hours: no reminders
         setState('warn', pick(WARN_LINES));
         count('reminders');
         closeSettings();
@@ -340,7 +367,7 @@
       clearTimeout(warnTimer); clearTimeout(badTimer); clearTimeout(happyTimer);
       setState('happy', pick(HAPPY_LINES));
       happyNote();
-      happyTimer = setTimeout(() => { setState('good', IDLE_LINE); schedule(); maybeWater(); }, 3000);
+      happyTimer = setTimeout(() => { setState('good', idleLine()); schedule(); maybeWater(); }, 3000);
     }
 
     act.onclick = fixed;
@@ -351,17 +378,17 @@
     const WATER_SHOW_MS  = (demo ? 6 : 10) * 1000;        // stays on screen about 10 seconds
     function scheduleWater() {
       clearTimeout(waterTimer);
-      waterTimer = setTimeout(() => { waterDue = true; maybeWater(); }, WATER_EVERY_MS);
+      waterTimer = setTimeout(() => { if (quiet) return scheduleWater(); waterDue = true; maybeWater(); }, WATER_EVERY_MS);
     }
     function maybeWater() {       // only when the shrimp is calm: posture reminders go first
-      if (!waterDue || state !== 'good') return;
+      if (!waterDue || state !== 'good' || quiet) return;
       waterDue = false;
       setState('water', pick(WATER_LINES));
       count('water');
       closeSettings(); waterSound();
       ipcRenderer.send('attention');
       clearTimeout(waterShowTimer);
-      waterShowTimer = setTimeout(() => { if (state === 'water') setState('good', IDLE_LINE); }, WATER_SHOW_MS);
+      waterShowTimer = setTimeout(() => { if (state === 'water') setState('good', idleLine()); }, WATER_SHOW_MS);
       scheduleWater();
     }
 
@@ -407,7 +434,7 @@
       if (state === 'good') {     // just a little cheer, the timer keeps running
         clearTimeout(happyTimer);
         setState('happy', pick(HAPPY_LINES));
-        happyTimer = setTimeout(() => { if (state === 'happy') { setState('good', IDLE_LINE); maybeWater(); } }, 2000);
+        happyTimer = setTimeout(() => { if (state === 'happy') { setState('good', idleLine()); maybeWater(); } }, 2000);
       }
     });
 
@@ -416,7 +443,7 @@
     Object.values(BLINK).forEach(n => { new Image().src = 'assets/' + n + '.png'; });   // preload
     function blinkOnce() {
       const st = state;
-      if (!BLINK[st]) return;                       // happy already has closed eyes
+      if (!BLINK[st] || (st === 'good' && quiet)) return;   // happy and sleepy already have closed eyes
       shrimp.src = 'assets/' + BLINK[st] + '.png';
       setTimeout(() => { if (state === st) shrimp.src = 'assets/' + PICS[st] + '.png'; }, 160);
     }
@@ -449,11 +476,13 @@
     // ---------- settings panel ----------
     const ROWS = [
       { key: 'remind', label: 'Minutes between reminders', opts: [15, 20, 30, 45], names: ['15', '20', '30', '45'] },
+      { key: 'quiet',  label: 'Night mode and quiet', opts: ['off', 'on'], names: ['Off', 'On'] },
       { key: 'sound',  label: 'Sound',                        opts: [true, false],   names: ['On', 'Off'] }
     ];
     const panel = document.getElementById('panel');
     const rowsEl = document.getElementById('rows');
     function refreshChips() {
+      updateNote();
       rowsEl.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', String(cfg[c.dataset.key]) === c.dataset.v));
     }
     function setSound(on) { cfg.sound = on; muted = !on; saveCfg(); refreshChips(); }
@@ -467,12 +496,17 @@
           if (r.key === 'sound') return setSound(o);
           cfg[r.key] = o; saveCfg(); refreshChips();
           if (r.key === 'remind' && state === 'good') schedule();   // restart the countdown with the new time
+          if (r.key === 'quiet') applyQuiet();
         };
         row.querySelector('.chips').appendChild(b);
       });
       rowsEl.appendChild(row);
     });
-    document.getElementById('note').textContent = demo ? 'Demo mode: reminders use fast test times.' : '';
+    function updateNote() {
+      let t = cfg.quiet === 'on' ? 'Night mode is on: the shrimp sleeps, no reminders, no sounds.' : 'Night mode is off.';
+      if (demo) t += ' Demo mode: fast test times.';
+      document.getElementById('note').textContent = t;
+    }
     function openSettings() { document.getElementById('stats').style.display = 'none'; panel.style.display = 'block'; }
     function closeSettings() { panel.style.display = 'none'; document.getElementById('stats').style.display = 'none'; }
     document.getElementById('gear').onclick = () => (panel.style.display === 'block' ? closeSettings() : openSettings());
@@ -508,6 +542,50 @@
     };
     document.getElementById('statsDone').onclick = () => { statsPanel.style.display = 'none'; };
     refreshStats();
+
+    // ---------- night mode + quiet hours ----------
+    const NSTARS = [[14, 14, 'fx-5'], [80, 22, 'fx-4'], [90, 56, 'fx-9'], [8, 52, 'fx-6'], [48, 27, 'fx-8'], [24, 34, 'fx-7'], [72, 38, 'fx-10']];
+    const NDOTS = [[6, 30], [20, 24], [34, 22], [62, 24], [78, 30], [93, 38], [14, 45], [88, 47], [10, 66], [90, 70]];
+    const nstarsEl = document.createElement('div');
+    NSTARS.forEach(([x, y, f], i) => {
+      const el = document.createElement('img');
+      el.className = 'nstar'; el.src = 'assets/fx/' + f + '.png';
+      el.style.left = x + '%'; el.style.top = y + '%'; el.style.animationDelay = (i * 0.5) + 's';
+      nstarsEl.appendChild(el);
+    });
+    NDOTS.forEach(([x, y], i) => {
+      const el = document.createElement('i');
+      el.className = 'ndot'; el.style.left = x + '%'; el.style.top = y + '%'; el.style.animationDelay = (i * 0.37) + 's';
+      nstarsEl.appendChild(el);
+    });
+    sea.insertBefore(nstarsEl, dropsEl);            // behind the shrimp
+    new Image().src = 'assets/sleepy-clean.png';
+    function inQuietHours() { return forceNight || cfg.quiet === 'on'; }   // the person decides: On = sleeping and quiet
+    function applyQuiet() {
+      const now = inQuietHours();
+      if (now === quiet) return;
+      quiet = now;
+      document.body.classList.toggle('night', quiet);
+      if (state === 'good') setState('good', idleLine());               // sleepy or awake shrimp
+    }
+    quiet = inQuietHours();
+    document.body.classList.toggle('night', quiet);
+    if (quiet) setState('good', idleLine());
+
+    // little "z" letters float up from the sleeping shrimp's mouth, like bubbles
+    const Z_SIZES = [28, 35, 42];                                // whole multiples of the 7px sprite stay crisp
+    function spawnZ() {
+      if (!quiet || state !== 'good') return;
+      const s = sea.getBoundingClientRect(), r = shrimp.getBoundingClientRect();
+      const z = document.createElement('img'), w = pick(Z_SIZES);
+      z.className = 'zzz'; z.src = 'assets/fx/z.png'; z.style.width = w + 'px';
+      z.style.left = (r.left - s.left + r.width * 0.15 - w / 2) + 'px';    // near the snout
+      z.style.top  = (r.top - s.top + r.height * 0.37 - w / 2) + 'px';
+      z.style.setProperty('--dx', (Math.random() * 22 - 16) + 'px');       // drifts a little sideways
+      z.addEventListener('animationend', () => z.remove());
+      sea.appendChild(z);
+    }
+    setInterval(spawnZ, 1500);
 
     schedule();
     scheduleWater();
