@@ -1,0 +1,25 @@
+# How Shrimply is packed into an installer (used by electron-builder)
+appId: com.dialeelova.shrimply
+productName: Shrimply
+copyright: Copyright (c) 2026 dialeelova
+directories:
+  output: dist
+files:
+  - index.html
+  - main.js
+  - camera-preload.js
+  - package.json
+  - assets/**/*
+win:
+  icon: assets/icon.ico
+  target:
+    - target: nsis
+      arch: x64
+nsis:
+  oneClick: true                  # no questions: it just installs and starts
+  perMachine: false               # installs for the current user, no administrator needed
+  createDesktopShortcut: always   # the shrimp icon on the desktop
+  createStartMenuShortcut: true
+  shortcutName: Shrimply
+  runAfterFinish: true
+artifactName: Shrimply-Setup.${ext}   # the same name every time, so one download link always works
