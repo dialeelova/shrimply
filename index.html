@@ -166,6 +166,30 @@
     body.night .face { filter: brightness(0.86) saturate(0.92); }
     body.night .msg { background: #E8DDF1; color: #5B4AA6; }
     body.night .seabed { filter: brightness(0.72) saturate(0.85); }
+    .camdot { display: none; width: 8px; height: 8px; border-radius: 50%; background: #FF5C8A; margin-left: 8px; animation: camblink 1.6s ease-in-out infinite; }
+    .camdot.on { display: inline-block; }
+    @keyframes camblink { 50% { opacity: 0.35; } }
+    .btn.cam { display: flex; align-items: center; justify-content: center; position: relative; }
+    .btn.cam::before { content: ''; width: 12px; height: 8px; border: 2px solid var(--ink); border-radius: 2px; }
+    .btn.cam::after { content: ''; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; background: var(--ink); border-radius: 50%; }
+    .cam-top { display: flex; gap: 10px; align-items: center; }
+    .cam-prev { width: 104px; height: 78px; flex: none; border: 3px solid var(--edge); background: #2A2D74; overflow: hidden; }
+    .cam-prev img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .cam-prev img:not([src]) { visibility: hidden; }
+    .cam-status { font-size: 14px; line-height: 1.25; }
+    .cam-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .cam-row .chips { margin-top: 0; flex: none; }
+    .cam-row span { font-size: 14px; }
+    .cam-row .chip { flex: none; padding: 4px 6px; font-size: 10px; }
+    .p-buttons { margin-top: auto; display: flex; gap: 10px; justify-content: center; }
+    .p-buttons .done { margin-top: 0; }
+    .done:disabled { opacity: 0.45; cursor: default; }
+    .p-note.small { font-size: 12px; }
+    .msg-border.fire { top: 46px; background: #FF6A1A; }
+    .msg-border.fire .msg { background: #FFF1CC; color: #B3260F; font-size: 18px; font-weight: 700; line-height: 1.2; padding: 10px 10px; }
+    #flames { position: absolute; left: 12px; right: 12px; top: 8px; height: 42px; display: none; z-index: 2; pointer-events: none;
+      background: url('assets/flames.png') repeat-x 0 0 / 72px 126px; image-rendering: pixelated; animation: flick 0.6s steps(3) infinite; }
+    @keyframes flick { to { background-position-y: -126px; } }
   </style>
 </head>
 <body>
@@ -173,11 +197,11 @@
     <div class="win" data-px data-s="4" data-n="3">
       <div class="face" data-px data-s="4" data-n="2">
         <div class="titlebar">
-          <span class="title"><img src="assets/bubble-s.png" alt="">Shrimply</span>
+          <span class="title"><img src="assets/bubble-s.png" alt="">Shrimply<i class="camdot" id="camDot" title="The camera is on"></i></span>
           <div class="buttons">
+            <button class="btn cam" id="camBtn" title="Camera mode"></button>
             <button class="btn gear" id="gear" title="Settings"></button>
             <button class="btn size" id="size" title="Window size"></button>
-            <button class="btn" id="min" title="Minimize">-</button>
             <button class="btn" id="close" title="Hide to tray">x</button>
           </div>
         </div>
@@ -202,6 +226,16 @@
                 <button class="done" id="done">Done</button>
               </div>
             </div>
+            <div class="panel-border" id="cam" data-px data-s="3" data-n="1">
+              <div class="panel" data-px data-s="3" data-n="1">
+                <div class="p-title">Camera</div>
+                <div class="cam-top"><div class="cam-prev"><img id="camPrev" alt=""></div><div class="cam-status" id="camStatus"></div></div>
+                <div class="cam-row"><span>Camera mode</span><div class="chips" id="camChipsMode"></div></div>
+                <div class="cam-row"><span>Sensitivity</span><div class="chips" id="camChipsSens"></div></div>
+                <div class="p-buttons"><button class="done" id="camCal">Set my posture</button><button class="done" id="camDone">Done</button></div>
+                <div class="p-note small">Your video stays on this computer. Nothing is saved or sent.</div>
+              </div>
+            </div>
             <div class="panel-border" id="stats" data-px data-s="3" data-n="1">
               <div class="panel" data-px data-s="3" data-n="1">
                 <div class="p-title">Today</div>
@@ -216,6 +250,7 @@
             <div class="msg-border" data-px data-s="3" data-n="1">
               <div class="msg" id="msg" data-px data-s="3" data-n="1">Shrimply do your best!</div>
             </div>
+            <div id="flames"></div>
           </div>
         </div>
       </div>
@@ -229,7 +264,6 @@
       try { first = !localStorage.getItem('trayHint'); localStorage.setItem('trayHint', '1'); } catch (e) {}
       ipcRenderer.send('hide', first);
     };
-    document.getElementById('min').onclick = () => ipcRenderer.send('minimize');
 
     // stepped pixel corners: staircase of n steps, each s px
     function poly(s, n) {
@@ -271,21 +305,26 @@
     const demo = params.get('test') === '1';
     const forceNight = params.get('night') === '1';     // "npm run night" shows the sleeping look
     // ---------- settings (saved in the app, so they are remembered) ----------
-    const DEFAULTS = { remind: 20, quiet: 'off', sound: true };
+    const DEFAULTS = { remind: 20, quiet: 'off', sound: true, camera: 'off', camSens: 'mid' };
     let cfg = Object.assign({}, DEFAULTS);
     try { Object.assign(cfg, JSON.parse(localStorage.getItem('settings') || '{}')); } catch (e) {}
     if (cfg.quiet !== 'on') cfg.quiet = 'off';          // older versions had time ranges
+    if (cfg.camera !== 'on') cfg.camera = 'off';
+    if (!['low', 'mid', 'high'].includes(cfg.camSens)) cfg.camSens = 'mid';
     function saveCfg() { try { localStorage.setItem('settings', JSON.stringify(cfg)); } catch (e) {} }
     const warnMs = () => (demo ? 10 : cfg.remind * 60) * 1000;   // time until the first reminder
-    const badMs  = () => (demo ? 8 : 2 * 60) * 1000;             // then 2 minutes until fully curled
+    const badMs  = () => (demo ? 2 : 2 * 60) * 1000;             // then 2 minutes until fully curled
 
     const WARN_LINES = ['Psst... is your back bending?', 'Check your back, little shrimp!', 'Shoulders back, please!'];
     const BAD_LINES  = ["Don't be a shrimp! Sit up straight!", 'You are turning into a shrimp!', 'Straighten up, shrimp!'];
     const HAPPY_LINES = ['Much better! Keep it up!', 'Proud of you!', 'Back to work, champion!'];
     let quiet = false;   // true during quiet hours: night look, no reminders, no sounds
     const idleLine = () => (quiet ? 'Zzz... Shrimply is sleeping' : 'Shrimply do your best!');
-    const PICS = { good: 'straight', warn: 'slight', bad: 'curled', happy: 'happy', water: 'straight' };
-    const WIDTHS = { good: 150, warn: 168, bad: 158, happy: 150, water: 150 };   // so every pose looks the same size
+    const ANGRY_LINES = ["You still haven't fixed your posture!", 'Sit up straight! I am not joking!', 'Your back is still bent! Fix it now!'];
+    const ANGRY_MS = (demo ? 5 : 3 * 60) * 1000;       // not fixed for this long (counted from the first warning): the shrimp gets angry
+    let angryTimer;
+    const PICS = { good: 'straight', warn: 'slight', bad: 'curled', happy: 'happy', water: 'straight', angry: 'angry' };
+    const WIDTHS = { good: 150, warn: 168, bad: 158, happy: 150, water: 150, angry: 158 };   // so every pose looks the same size
 
     const shrimp = document.getElementById('shrimp');
     const msg = document.getElementById('msg');
@@ -293,6 +332,8 @@
     const act = document.getElementById('act');
     const dropsEl = document.getElementById('drops');
     const msgBox = document.querySelector('.msg-border');
+    const flamesEl = document.getElementById('flames');
+    ['assets/angry.png', 'assets/flames.png'].forEach(src => { new Image().src = src; });
     const sea = document.querySelector('.sea');
     const WATER_LINES = ['Drink some water!', 'Time to drink water!', 'Have a sip of water!', 'Stay hydrated! Drink water!'];
     let state = 'good', warnTimer, badTimer, happyTimer, muted = !cfg.sound;
@@ -305,9 +346,12 @@
       shrimp.src = 'assets/' + (sleepy ? 'sleepy-clean' : PICS[st]) + '.png';
       shrimp.style.width = w + 'px';
       shrimp.style.marginLeft = -w / 2 + 'px';
-      actWrap.style.display = (st === 'warn' || st === 'bad') ? 'block' : 'none';
+      shrimp.style.marginTop = st === 'angry' ? '-52px' : '';          // a little lower, to make room for the burning box
+      actWrap.style.display = ((st === 'warn' || st === 'bad' || st === 'angry') && !cameraWatching()) ? 'block' : 'none';   // the camera sees you sit up, so it needs no button
       if (st === 'water') startRain(); else stopRain();
       msgBox.classList.toggle('water', st === 'water');
+      msgBox.classList.toggle('fire', st === 'angry');
+      flamesEl.style.display = st === 'angry' ? 'block' : 'none';
       if (st === 'happy') sparkleBurst();
       if (text) msg.textContent = text;
     }
@@ -349,22 +393,49 @@
       });
     }
 
+    function alarmSound() {       // a warning: three short beeps, low-high-low (softened so it is firm but not harsh)
+      if (muted || quiet) return; audio.resume();
+      const filter = audio.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 1800; filter.connect(audio.destination);
+      [[0, 440], [0.22, 620], [0.44, 440]].forEach(([start, freq]) => {
+        const t = audio.currentTime + start;
+        const osc = audio.createOscillator(), gain = audio.createGain();
+        osc.type = 'square'; osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(0.1, t + 0.01);
+        gain.gain.setValueAtTime(0.1, t + 0.12);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
+        osc.connect(gain).connect(filter);
+        osc.start(t); osc.stop(t + 0.2);
+      });
+    }
+
     // ---------- the cycle ----------
+    function startWarn() {        // the shrimp starts to slouch: from the timer or from the camera
+      setState('warn', pick(WARN_LINES));
+      count('reminders');
+      closeSettings();
+      chime();
+      ipcRenderer.send('attention');
+      clearTimeout(badTimer);
+      badTimer = setTimeout(() => setState('bad', pick(BAD_LINES)), badMs());
+      clearTimeout(angryTimer);
+      angryTimer = setTimeout(() => {
+        if (state !== 'warn' && state !== 'bad') return;
+        setState('angry', pick(ANGRY_LINES));
+        alarmSound();
+        ipcRenderer.send('attention');           // show the window again if it was hidden in the tray
+      }, ANGRY_MS);
+    }
     function schedule() {
-      clearTimeout(warnTimer); clearTimeout(badTimer);
+      clearTimeout(warnTimer); clearTimeout(badTimer); clearTimeout(angryTimer);
       warnTimer = setTimeout(() => {
-        if (quiet) return schedule();            // quiet hours: no reminders
-        setState('warn', pick(WARN_LINES));
-        count('reminders');
-        closeSettings();
-        chime();
-        ipcRenderer.send('attention');
-        badTimer = setTimeout(() => setState('bad', pick(BAD_LINES)), badMs());
+        if (quiet || cameraWatching()) return schedule();    // quiet: no reminders. camera on: the camera does the watching
+        startWarn();
       }, warnMs());
     }
     function fixed() {            // user sat up straight
-      if (state === 'warn' || state === 'bad') { count('fixed'); if (state === 'warn') count('early'); }
-      clearTimeout(warnTimer); clearTimeout(badTimer); clearTimeout(happyTimer);
+      if (state === 'warn' || state === 'bad' || state === 'angry') { count('fixed'); if (state === 'warn') count('early'); }
+      clearTimeout(warnTimer); clearTimeout(badTimer); clearTimeout(angryTimer); clearTimeout(happyTimer);
       setState('happy', pick(HAPPY_LINES));
       happyNote();
       happyTimer = setTimeout(() => { setState('good', idleLine()); schedule(); maybeWater(); }, 3000);
@@ -430,7 +501,7 @@
       }
     }
     shrimp.addEventListener('click', () => {
-      if (state === 'warn' || state === 'bad') return fixed();
+      if (state === 'warn' || state === 'bad' || state === 'angry') return fixed();
       if (state === 'good') {     // just a little cheer, the timer keeps running
         clearTimeout(happyTimer);
         setState('happy', pick(HAPPY_LINES));
@@ -507,8 +578,8 @@
       if (demo) t += ' Demo mode: fast test times.';
       document.getElementById('note').textContent = t;
     }
-    function openSettings() { document.getElementById('stats').style.display = 'none'; panel.style.display = 'block'; }
-    function closeSettings() { panel.style.display = 'none'; document.getElementById('stats').style.display = 'none'; }
+    function openSettings() { closeCam(); document.getElementById('stats').style.display = 'none'; panel.style.display = 'block'; }
+    function closeSettings() { panel.style.display = 'none'; document.getElementById('stats').style.display = 'none'; closeCam(); }
     document.getElementById('gear').onclick = () => (panel.style.display === 'block' ? closeSettings() : openSettings());
     document.getElementById('done').onclick = closeSettings;
     refreshChips();
@@ -517,7 +588,7 @@
     const todayKey = () => new Date().toLocaleDateString('en-CA');          // like 2026-10-21
     const freshStats = () => ({ date: todayKey(), fixed: 0, early: 0, reminders: 0, water: 0 });
     let stats = freshStats();
-    try { const saved = JSON.parse(localStorage.getItem('stats') || 'null'); if (saved && saved.date === todayKey()) stats = saved; } catch (e) {}
+    try { const saved = JSON.parse(localStorage.getItem('stats') || 'null'); if (!demo && saved && saved.date === todayKey()) stats = saved; } catch (e) {}   // demo mode never touches the real stats
     const statsPanel = document.getElementById('stats');
     function refreshStats() {
       if (stats.date !== todayKey()) stats = freshStats();
@@ -533,15 +604,155 @@
     function count(key) {
       refreshStats();                                                         // starts a new day if needed
       stats[key]++;
-      try { localStorage.setItem('stats', JSON.stringify(stats)); } catch (e) {}
+      if (!demo) { try { localStorage.setItem('stats', JSON.stringify(stats)); } catch (e) {} }
       refreshStats();
     }
     document.getElementById('statsBtn').onclick = () => {
       if (statsPanel.style.display === 'block') { statsPanel.style.display = 'none'; return; }
-      panel.style.display = 'none'; refreshStats(); statsPanel.style.display = 'block';
+      panel.style.display = 'none'; closeCam(); refreshStats(); statsPanel.style.display = 'block';
     };
     document.getElementById('statsDone').onclick = () => { statsPanel.style.display = 'none'; };
     refreshStats();
+
+    // ---------- camera mode: the shrimp watches your head and shoulders ----------
+    const SENS = { low: { drop: 0.15, lean: 0.20 }, mid: { drop: 0.10, lean: 0.15 }, high: { drop: 0.07, lean: 0.10 } };
+    const SLOUCH_MS = (demo ? 4 : 10) * 1000;    // bent for this long before the shrimp speaks up
+    const RECOVER_MS = (demo ? 2 : 3) * 1000;    // sitting well for this long: fixed by itself
+    const AWAY_MS = 15 * 1000;                   // nobody in view for this long: reminders pause
+    let camState = 'off';                        // off | starting | needBase | watching | away | paused | error
+    let camText = '', calib = null, smooth = null, slouchSince = 0, goodSince = 0, lastSeen = 0, camBase = null;
+    try { camBase = JSON.parse(localStorage.getItem('camBase') || 'null'); } catch (e) {}
+    const camPanel = document.getElementById('cam'), camPrev = document.getElementById('camPrev');
+    const camStatusEl = document.getElementById('camStatus'), camDot = document.getElementById('camDot');
+    const cameraWatching = () => cfg.camera === 'on' && (camState === 'watching' || camState === 'away');
+
+    function chipRow(el, key, opts) {
+      opts.forEach(([v, name]) => {
+        const b = document.createElement('button');
+        b.className = 'chip'; b.textContent = name; b.dataset.key = key; b.dataset.v = v;
+        b.onclick = () => camChoose(key, v);
+        el.appendChild(b);
+      });
+    }
+    chipRow(document.getElementById('camChipsMode'), 'camera', [['off', 'Off'], ['on', 'On']]);
+    chipRow(document.getElementById('camChipsSens'), 'camSens', [['low', 'Low'], ['mid', 'Mid'], ['high', 'High']]);
+
+    function camChoose(key, v) {
+      if (key === 'camera') return setCamera(v === 'on');
+      cfg.camSens = v; saveCfg(); smooth = null; slouchSince = goodSince = 0; camUpdate();
+    }
+    function setCamera(on) {
+      cfg.camera = on ? 'on' : 'off'; saveCfg();
+      smooth = null; slouchSince = goodSince = 0; calib = null; camText = '';
+      if (on) {
+        if (quiet) camState = 'paused';
+        else { camState = 'starting'; ipcRenderer.send('camera', { cmd: 'start' }); }
+      } else { camState = 'off'; ipcRenderer.send('camera', { cmd: 'stop' }); }
+      camUpdate();
+    }
+    function camUpdate() {
+      camDot.classList.toggle('on', cfg.camera === 'on' && ['starting', 'needBase', 'watching', 'away'].includes(camState));
+      let t = camText;
+      if (!t) t = cfg.camera !== 'on' ? 'Camera mode is off. Reminders use the timer.'
+        : camState === 'starting' ? 'Starting the camera...'
+        : camState === 'needBase' ? 'Sit up straight and press Set my posture.'
+        : camState === 'away' ? 'I cannot see you, so reminders are paused.'
+        : camState === 'paused' ? 'Paused while night mode is on.'
+        : camState === 'watching' ? 'Watching your posture.' : '';
+      camStatusEl.textContent = t;
+      camPanel.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', String(cfg[c.dataset.key]) === c.dataset.v));
+      document.getElementById('camCal').disabled = !(cfg.camera === 'on' && ['needBase', 'watching', 'away'].includes(camState) && !calib);
+      actWrap.style.display = ((state === 'warn' || state === 'bad' || state === 'angry') && !cameraWatching()) ? 'block' : 'none';   // button only when the camera is not watching
+    }
+
+    // messages from the hidden camera window
+    ipcRenderer.on('cam-msg', (e, m) => {
+      if (m.type === 'status') {
+        camText = '';
+        if (m.state === 'ready') {
+          camState = camBase ? 'watching' : 'needBase'; lastSeen = Date.now();
+          if (camPanel.style.display === 'block') ipcRenderer.send('camera', { cmd: 'preview', on: true });
+        } else if (m.state === 'error') { camState = 'error'; camText = m.text; }
+        else if (m.state === 'stopped') { if (camState !== 'paused') camState = 'off'; camPrev.removeAttribute('src'); }
+        else camState = 'starting';
+        camUpdate();
+      } else if (m.type === 'sample') camSample(m);
+      else if (m.type === 'preview') camPrev.src = m.url;
+    });
+
+    function camSample(m) {
+      const now = Date.now();
+      if (calib) return calibSample(m, now);
+      if (cfg.camera !== 'on' || !camBase || (camState !== 'watching' && camState !== 'away')) return;
+      if (!m.present) {
+        if (camState === 'watching' && now - lastSeen > AWAY_MS) { camState = 'away'; camUpdate(); }
+        return;
+      }
+      lastSeen = now;
+      if (camState === 'away') { camState = 'watching'; camUpdate(); }
+      smooth = smooth ? { headDrop: smooth.headDrop * 0.6 + m.headDrop * 0.4, faceW: smooth.faceW * 0.6 + m.faceW * 0.4 }
+                      : { headDrop: m.headDrop, faceW: m.faceW };
+      const T = SENS[cfg.camSens] || SENS.mid;
+      const dropPct = (camBase.headDrop - smooth.headDrop) / camBase.headDrop;   // head sinking toward the shoulders
+      const leanPct = smooth.faceW / camBase.faceW - 1;                          // head coming closer to the screen
+      const bad = dropPct > T.drop || leanPct > T.lean;
+      const ok = dropPct < T.drop * 0.6 && leanPct < T.lean * 0.6;
+      if (bad) { goodSince = 0; if (!slouchSince) slouchSince = now; }
+      else if (ok) { slouchSince = 0; if (!goodSince) goodSince = now; }
+      if ((state === 'good' || state === 'water') && slouchSince && now - slouchSince > SLOUCH_MS && !quiet) { slouchSince = 0; startWarn(); }
+      else if ((state === 'warn' || state === 'bad' || state === 'angry') && goodSince && now - goodSince > RECOVER_MS) { goodSince = 0; fixed(); }   // sat up by itself
+    }
+
+    // calibration: a few seconds of "this is how I sit when I sit well"
+    function startCalibrate() {
+      if (calib) return;
+      calib = { samples: [], until: Date.now() + 4000, timer: setTimeout(finishCalib, 6500) };
+      ipcRenderer.send('camera', { cmd: 'fast', on: true });
+      camText = 'Sit up straight and hold still... 4'; camUpdate();
+    }
+    function calibSample(m, now) {
+      if (m.present) calib.samples.push(m);
+      camText = 'Sit up straight and hold still... ' + Math.max(0, Math.ceil((calib.until - now) / 1000)); camUpdate();
+      if (now >= calib.until) finishCalib();
+    }
+    function finishCalib() {
+      if (!calib) return;
+      clearTimeout(calib.timer);
+      const s = calib.samples; calib = null;
+      ipcRenderer.send('camera', { cmd: 'fast', on: false });
+      if (s.length < 5) { camText = 'I could not see your head and shoulders. Move back a little and try again.'; camUpdate(); return; }
+      const med = k => { const a = s.map(x => x[k]).sort((p, q) => p - q); return a[Math.floor(a.length / 2)]; };
+      camBase = { headDrop: med('headDrop'), faceW: med('faceW') };
+      try { localStorage.setItem('camBase', JSON.stringify(camBase)); } catch (e) {}
+      smooth = null; slouchSince = goodSince = 0; camState = 'watching'; lastSeen = Date.now();
+      camText = 'Done! I will tell you when you bend.'; camUpdate();
+      setTimeout(() => { if (camText.startsWith('Done')) { camText = ''; camUpdate(); } }, 4000);
+    }
+
+    // panel
+    function closeCam() { camPanel.style.display = 'none'; ipcRenderer.send('camera', { cmd: 'preview', on: false }); }
+    document.getElementById('camBtn').onclick = () => {
+      if (camPanel.style.display === 'block') return closeCam();
+      panel.style.display = 'none'; statsPanel.style.display = 'none';
+      camPanel.style.display = 'block'; ipcRenderer.send('camera', { cmd: 'preview', on: true }); camUpdate();
+    };
+    document.getElementById('camDone').onclick = closeCam;
+    document.getElementById('camCal').onclick = startCalibrate;
+
+    // night mode pauses the camera, and waking up starts it again
+    function camQuietChanged() {
+      if (cfg.camera !== 'on') return;
+      if (quiet) { camState = 'paused'; ipcRenderer.send('camera', { cmd: 'stop' }); }
+      else { camState = 'starting'; ipcRenderer.send('camera', { cmd: 'start' }); }
+      camUpdate();
+    }
+    function camInit() {
+      if (cfg.camera === 'on') {
+        if (quiet) camState = 'paused';
+        else { camState = 'starting'; ipcRenderer.send('camera', { cmd: 'start' }); }
+      }
+      camUpdate();
+    }
 
     // ---------- night mode + quiet hours ----------
     const NSTARS = [[14, 14, 'fx-5'], [80, 22, 'fx-4'], [90, 56, 'fx-9'], [8, 52, 'fx-6'], [48, 27, 'fx-8'], [24, 34, 'fx-7'], [72, 38, 'fx-10']];
@@ -567,6 +778,7 @@
       quiet = now;
       document.body.classList.toggle('night', quiet);
       if (state === 'good') setState('good', idleLine());               // sleepy or awake shrimp
+      camQuietChanged();
     }
     quiet = inQuietHours();
     document.body.classList.toggle('night', quiet);
@@ -589,6 +801,7 @@
 
     schedule();
     scheduleWater();
+    camInit();
   </script>
 </body>
 </html>

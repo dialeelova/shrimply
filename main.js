@@ -1,5 +1,7 @@
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu, session } = require('electron');
 const path = require('path');
+const http = require('http');
+const fs = require('fs');
 
 let win, tray;
 
@@ -9,7 +11,12 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on('second-instance', () => showWindow());
-  app.whenReady().then(() => { createWindow(); createTray(); });
+  app.whenReady().then(() => {
+    // the camera helper is our own page, so it may use the camera (and nothing else)
+    session.defaultSession.setPermissionRequestHandler((wc, permission, cb) => cb(permission === 'media'));
+    session.defaultSession.setPermissionCheckHandler((wc, permission) => permission === 'media');
+    createWindow(); createTray();
+  });
   app.on('window-all-closed', () => app.quit());
 }
 
@@ -80,3 +87,54 @@ ipcMain.on('scale', (e, s) => {
   const b = win.getBounds();
   win.setBounds({ x: b.x + b.width - w, y: b.y + b.height - h, width: w, height: h });
 });
+
+// ---------- camera mode ----------
+// A hidden window watches the webcam and sends back a few numbers about head and shoulders.
+// Video never leaves that window. It is served from a tiny local server (127.0.0.1 only).
+let camWin = null, camServer = null, camPort = 0;
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm' };
+
+function startCamServer() {
+  return new Promise(resolve => {
+    if (camServer) return resolve(camPort);
+    const root = path.join(__dirname, 'assets', 'camera');
+    camServer = http.createServer((req, res) => {
+      const url = decodeURIComponent((req.url || '/').split('?')[0]);
+      const file = path.normalize(path.join(root, url === '/' ? 'camera.html' : url));
+      if (!file.startsWith(root)) { res.writeHead(403); return res.end(); }        // only files inside assets/camera
+      fs.readFile(file, (err, buf) => {
+        if (err) { res.writeHead(404); return res.end(); }
+        res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+        res.end(buf);
+      });
+    });
+    camServer.listen(0, '127.0.0.1', () => { camPort = camServer.address().port; resolve(camPort); });
+  });
+}
+
+async function startCamera() {
+  if (camWin) { camWin.destroy(); camWin = null; }          // start fresh (also retries after an error)
+  const port = await startCamServer();
+  camWin = new BrowserWindow({
+    show: false, width: 320, height: 240,
+    webPreferences: {
+      preload: path.join(__dirname, 'camera-preload.js'),
+      contextIsolation: true, nodeIntegration: false,
+      backgroundThrottling: false          // keep watching even though the window is hidden
+    }
+  });
+  camWin.on('closed', () => { camWin = null; });
+  camWin.loadURL('http://127.0.0.1:' + port + '/camera.html');
+}
+
+function stopCamera() {
+  if (camWin) { camWin.destroy(); camWin = null; }       // closing the window turns the camera light off
+  if (win && !win.isDestroyed()) win.webContents.send('cam-msg', { type: 'status', state: 'stopped', text: '' });
+}
+
+ipcMain.on('camera', (e, msg) => {
+  if (msg.cmd === 'start') startCamera();
+  else if (msg.cmd === 'stop') stopCamera();
+  else if (camWin) camWin.webContents.send('cam-cmd', msg);     // fast / preview
+});
+ipcMain.on('cam-msg', (e, msg) => { if (win && !win.isDestroyed()) win.webContents.send('cam-msg', msg); });
