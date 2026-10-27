@@ -1,4 +1,4 @@
-# Shrimply 🦐
+# Shrimply 
 
 Shrimply is a small desktop companion for Windows. It lives on your screen, reminds you to sit up straight, and gets visibly unhappy when you ignore it. Use a simple timer, or turn on your webcam and let it notice slouching on its own.
 
