@@ -4,6 +4,7 @@
  
 Shrimply is a small desktop companion for Windows. It lives on your screen, reminds you to sit up straight, and gets visibly unhappy when you ignore it. Use a simple timer, or turn on your webcam and let it notice slouching on its own.
 
+
 ## The Idea Behind the Project
 
 Long hours at a computer are part of everyday life for IT students and for millions of people who work or study on a screen. Over time, most of us begin to lean toward the monitor without noticing: the head moves forward, the shoulders round, and the whole posture slowly curls up, much like a shrimp. The result is neck and back pain, fatigue, and a habit that is hard to break, because the slouching happens gradually and usually goes unnoticed until it already hurts.
