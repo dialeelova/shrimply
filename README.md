@@ -26,9 +26,7 @@ Long hours at a screen make us lean in: head forward, shoulders rounded, curled 
 
 ## Install
 
-1. [Download **Shrimply-Setup.exe**](https://github.com/dialeelova/shrimply/releases/latest/download/Shrimply-Setup.exe) and run it. No administrator rights needed.
-2. If Windows shows **"Windows protected your PC"**, click **More info**, then **Run anyway**. This appears for any app without a paid certificate.
-
+[Download **Shrimply-Setup.exe**](https://github.com/dialeelova/shrimply/releases/latest/download/Shrimply-Setup.exe) and run it. No administrator rights needed.
 Requires Windows 10 or 11 (64-bit). Closing the window hides Shrimply in the tray; right-click the tray icon to quit.
 
 ## Camera Mode
