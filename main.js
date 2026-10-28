@@ -71,14 +71,8 @@ function createTray() {
 
 // ---------- messages from the window ----------
 ipcMain.on('minimize', () => win.minimize());
-// the x button: the installed app hides to the tray; while developing it just quits
-ipcMain.on('hide', (e, showHint) => {
-  if (!app.isPackaged) return app.quit();
-  win.hide();
-  if (showHint && tray.displayBalloon) {
-    tray.displayBalloon({ title: 'Shrimply is still here', content: 'Click the tray icon to bring the shrimp back. Right-click it to quit.' });
-  }
-});
+// the x button quits the app completely
+ipcMain.on('quit', () => app.quit());
 // a reminder fired: bring the window back if it was minimized or hidden
 ipcMain.on('attention', () => { if (win.isMinimized()) win.restore(); if (!win.isVisible()) win.showInactive(); });
 // shrink or grow the window (100% = 360 x 420), keeping the bottom-right corner in place
