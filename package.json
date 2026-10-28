@@ -1,6 +1,6 @@
 {
   "name": "shrimply",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A tiny pixel shrimp that reminds you to sit up straight",
   "main": "main.js",
   "scripts": {

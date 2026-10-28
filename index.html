@@ -202,7 +202,7 @@
             <button class="btn cam" id="camBtn" title="Camera mode"></button>
             <button class="btn gear" id="gear" title="Settings"></button>
             <button class="btn size" id="size" title="Window size"></button>
-            <button class="btn" id="close" title="Hide to tray">x</button>
+            <button class="btn" id="close" title="Quit">x</button>
           </div>
         </div>
         <div class="sea-border" data-px data-s="3" data-n="1">
@@ -259,11 +259,7 @@
 
   <script>
     const { ipcRenderer, webFrame } = require('electron');
-    document.getElementById('close').onclick = () => {      // hide to the tray (the app keeps running)
-      let first = false;
-      try { first = !localStorage.getItem('trayHint'); localStorage.setItem('trayHint', '1'); } catch (e) {}
-      ipcRenderer.send('hide', first);
-    };
+    document.getElementById('close').onclick = () => ipcRenderer.send('quit');      // the x button quits the app completely
 
     // stepped pixel corners: staircase of n steps, each s px
     function poly(s, n) {
